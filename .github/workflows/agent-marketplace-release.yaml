@@ -129,6 +129,7 @@ jobs:
           TAG: ${{ needs.release-please.outputs.tag_name }}
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
+          SKILL_ROOT: ${{ inputs.skill_root }}
           CLAUDE_PLUGIN_NAME: ${{ inputs.claude_plugin_name }}
           CLAUDE_MARKETPLACE_NAME: ${{ inputs.claude_marketplace_name }}
           CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
@@ -137,7 +138,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           # Agent marketplace ${VERSION}
 
-          Released from tag `${TAG}`.
+          Release tag: `${TAG}`
 
           ## Claude Code
 
@@ -157,16 +158,14 @@ jobs:
           ## OpenCode
 
           ```bash
-          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT:-skills} --agent opencode --skill '*'
+          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent opencode --skill '*'
           ```
 
           ## Cursor
 
           ```bash
-          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT:-skills} --agent cursor --skill '*'
+          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent cursor --skill '*'
           ```
-
-          Cursor's native `/add-plugin ${CURSOR_PLUGIN_NAME}` flow can be used after the plugin is published to the Cursor Marketplace.
           EOF
       - name: Upload archive to GitHub Release
         uses: softprops/action-gh-release@v2
