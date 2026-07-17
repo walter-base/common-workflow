@@ -1,0 +1,91 @@
+name: Agent marketplace preview
+
+on:
+  workflow_call:
+    inputs:
+      skill_root:
+        description: Canonical skill directory relative to the repository root.
+        required: false
+        type: string
+        default: skills
+      claude_marketplace_file:
+        description: Claude marketplace manifest relative to the repository root.
+        required: false
+        type: string
+        default: .claude-plugin/marketplace.json
+      claude_plugin_file:
+        description: Claude plugin manifest relative to the repository root.
+        required: false
+        type: string
+        default: .claude-plugin/plugin.json
+      codex_plugin_root:
+        description: Codex plugin root relative to the repository root.
+        required: false
+        type: string
+      cursor_plugin_root:
+        description: Cursor plugin root relative to the repository root.
+        required: false
+        type: string
+      package_paths:
+        description: Space-separated paths to package into the preview archive.
+        required: false
+        type: string
+        default: skills .claude-plugin .cursor-plugin .agents plugins README.md CHANGELOG.md
+      archive_name:
+        description: Prefix used for the preview archive.
+        required: false
+        type: string
+        default: agent-marketplace
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+      - name: Validate agent marketplace
+        uses: walter-base/common-workflow/actions/validate-agent-marketplace@master
+        with:
+          skill_root: ${{ inputs.skill_root }}
+          claude_marketplace_file: ${{ inputs.claude_marketplace_file }}
+          claude_plugin_file: ${{ inputs.claude_plugin_file }}
+          codex_plugin_root: ${{ inputs.codex_plugin_root }}
+          cursor_plugin_root: ${{ inputs.cursor_plugin_root }}
+      - name: Build preview archive
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
+        shell: bash
+        run: |
+          short_sha="${SHA:0:7}"
+          dir="${ARCHIVE_NAME}-pr-${PR_NUMBER}-${short_sha}"
+          mkdir -p "dist/${dir}"
+          for path in ${PACKAGE_PATHS}; do
+            cp -R "$path" "dist/${dir}/"
+          done
+          tar -czf "dist/${dir}.tar.gz" -C dist "${dir}"
+          echo "PREVIEW_ARCHIVE=dist/${dir}.tar.gz" >> "$GITHUB_ENV"
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.archive_name }}-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ env.PREVIEW_ARCHIVE }}
+          retention-days: 14
+      - name: Write preview summary
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # ${ARCHIVE_NAME} preview for PR #${PR_NUMBER}
+
+          Preview artifact: `${ARCHIVE_NAME}-pr-${PR_NUMBER}-${SHA}`
+
+          This artifact expires automatically after 14 days. Stable releases are created only after a release PR is merged into the default branch.
+          EOF

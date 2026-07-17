@@ -1,0 +1,33 @@
+name: Validate agent marketplace
+description: Validate Agent Skills and their Claude, Codex, and Cursor distribution bundles.
+inputs:
+  skill_root:
+    description: Root directory containing one skill directory per skill.
+    required: false
+    default: skills
+  claude_marketplace_file:
+    description: Optional Claude marketplace manifest relative to the repository root.
+    required: false
+    default: .claude-plugin/marketplace.json
+  claude_plugin_file:
+    description: Optional Claude plugin manifest relative to the repository root.
+    required: false
+    default: .claude-plugin/plugin.json
+  codex_plugin_root:
+    description: Optional Codex plugin root relative to the repository root.
+    required: false
+  cursor_plugin_root:
+    description: Optional Cursor plugin root relative to the repository root.
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Validate marketplace
+      shell: bash
+      env:
+        SKILL_ROOT: ${{ inputs.skill_root }}
+        CLAUDE_MARKETPLACE_FILE: ${{ inputs.claude_marketplace_file }}
+        CLAUDE_PLUGIN_FILE: ${{ inputs.claude_plugin_file }}
+        CODEX_PLUGIN_ROOT: ${{ inputs.codex_plugin_root }}
+        CURSOR_PLUGIN_ROOT: ${{ inputs.cursor_plugin_root }}
+      run: "${{ github.action_path }}/validate.sh"

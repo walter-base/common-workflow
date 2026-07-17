@@ -1,0 +1,46 @@
+name: Agent marketplace CI
+
+on:
+  workflow_call:
+    inputs:
+      skill_root:
+        description: Canonical skill directory relative to the repository root.
+        required: false
+        type: string
+        default: skills
+      claude_marketplace_file:
+        description: Claude marketplace manifest relative to the repository root.
+        required: false
+        type: string
+        default: .claude-plugin/marketplace.json
+      claude_plugin_file:
+        description: Claude plugin manifest relative to the repository root.
+        required: false
+        type: string
+        default: .claude-plugin/plugin.json
+      codex_plugin_root:
+        description: Codex plugin root relative to the repository root.
+        required: false
+        type: string
+      cursor_plugin_root:
+        description: Cursor plugin root relative to the repository root.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate agent marketplace
+        uses: walter-base/common-workflow/actions/validate-agent-marketplace@master
+        with:
+          skill_root: ${{ inputs.skill_root }}
+          claude_marketplace_file: ${{ inputs.claude_marketplace_file }}
+          claude_plugin_file: ${{ inputs.claude_plugin_file }}
+          codex_plugin_root: ${{ inputs.codex_plugin_root }}
+          cursor_plugin_root: ${{ inputs.cursor_plugin_root }}
