@@ -138,34 +138,34 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           # Agent marketplace ${VERSION}
 
-          Release tag: `${TAG}`
+          Release tag: \`${TAG}\`
 
           ## Claude Code
 
-          ```bash
+          \`\`\`bash
           claude plugin marketplace add ${REPOSITORY}@${TAG}
           claude plugin install ${CLAUDE_PLUGIN_NAME}@${CLAUDE_MARKETPLACE_NAME}
-          ```
+          \`\`\`
 
           ## Codex
 
-          ```bash
+          \`\`\`bash
           codex plugin marketplace add ${REPOSITORY} --ref ${TAG}
           codex
           # In Codex, run: /plugins and install ${CODEX_MARKETPLACE_NAME}.
-          ```
+          \`\`\`
 
           ## OpenCode
 
-          ```bash
+          \`\`\`bash
           npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent opencode --skill '*'
-          ```
+          \`\`\`
 
           ## Cursor
 
-          ```bash
+          \`\`\`bash
           npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent cursor --skill '*'
-          ```
+          \`\`\`
           EOF
       - name: Upload archive to GitHub Release
         uses: softprops/action-gh-release@v2
