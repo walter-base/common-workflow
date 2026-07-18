@@ -53,6 +53,16 @@ on:
         required: false
         type: string
         default: agent-marketplace
+      claude_package_name:
+        description: Public Gitea generic package name for the Claude release artifact.
+        required: false
+        type: string
+        default: agent-marketplace-claude
+      codex_package_name:
+        description: Public Gitea generic package name for the Codex release artifact.
+        required: false
+        type: string
+        default: agent-marketplace-codex
       claude_plugin_name:
         description: Claude plugin name used in the installation summary.
         required: false
@@ -79,7 +89,7 @@ on:
         type: string
         default: marketplace
       publish_gitea:
-        description: Upload the released archive to Gitea and write its URL to the summary.
+        description: Upload public Claude and Codex installer packages to Gitea.
         required: false
         type: boolean
         default: false
@@ -159,13 +169,81 @@ jobs:
           for path in ${PACKAGE_PATHS}; do
             cp -R "$path" "dist/${dir}/"
           done
-          tar -czf "dist/${dir}.tar.gz" -C dist "${dir}"
+          tar -czf "dist/${ARCHIVE_NAME}-claude-${VERSION}.tar.gz" -C dist "${dir}"
+          tar -czf "dist/${ARCHIVE_NAME}-codex-${VERSION}.tar.gz" -C dist "${dir}"
+
+      - name: Build Gitea installers
+        if: inputs.publish_gitea
+        env:
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
+          CLAUDE_PACKAGE_NAME: ${{ inputs.claude_package_name }}
+          CODEX_PACKAGE_NAME: ${{ inputs.codex_package_name }}
+          GITEA_URL: ${{ inputs.gitea_url }}
+          GITEA_USER: ${{ inputs.gitea_user }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+          CLAUDE_PLUGIN_NAME: ${{ inputs.claude_plugin_name }}
+          CLAUDE_MARKETPLACE_NAME: ${{ inputs.claude_marketplace_name }}
+          CODEX_PLUGIN_NAME: ${{ inputs.codex_plugin_name }}
+          CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
+        shell: bash
+        run: |
+          : "${GITEA_URL:?Set gitea_url when publish_gitea is enabled}"
+          : "${GITEA_USER:?Set gitea_user when publish_gitea is enabled}"
+          cat > "dist/install-${ARCHIVE_NAME}-claude-${VERSION}.sh" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          version="\${1:-${VERSION}}"
+          install_dir="\${MEDIVA_PLUGIN_DIR:-\$HOME/.local/share/${ARCHIVE_NAME}/claude}"
+          archive_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CLAUDE_PACKAGE_NAME}/\${version}/${ARCHIVE_NAME}-claude-\${version}.tar.gz"
+          tmp_dir="\$(mktemp -d)"
+          trap 'rm -rf "\$tmp_dir"' EXIT
+
+          curl --fail --location --retry 3 "\$archive_url" -o "\$tmp_dir/plugin.tar.gz"
+          mkdir -p "\$tmp_dir/extracted"
+          tar -xzf "\$tmp_dir/plugin.tar.gz" -C "\$tmp_dir/extracted"
+          rm -rf "\$install_dir"
+          mkdir -p "\$(dirname "\$install_dir")"
+          mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
+
+          claude plugin marketplace remove '${CLAUDE_MARKETPLACE_NAME}' >/dev/null 2>&1 || true
+          claude plugin marketplace add "\$install_dir"
+          claude plugin install '${CLAUDE_PLUGIN_NAME}@${CLAUDE_MARKETPLACE_NAME}'
+          echo "Installed ${CLAUDE_PLUGIN_NAME} for Claude Code from Gitea."
+          EOF
+          chmod +x "dist/install-${ARCHIVE_NAME}-claude-${VERSION}.sh"
+
+          cat > "dist/install-${ARCHIVE_NAME}-codex-${VERSION}.sh" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          version="\${1:-${VERSION}}"
+          install_dir="\${MEDIVA_PLUGIN_DIR:-\$HOME/.local/share/${ARCHIVE_NAME}/codex}"
+          archive_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CODEX_PACKAGE_NAME}/\${version}/${ARCHIVE_NAME}-codex-\${version}.tar.gz"
+          tmp_dir="\$(mktemp -d)"
+          trap 'rm -rf "\$tmp_dir"' EXIT
+
+          curl --fail --location --retry 3 "\$archive_url" -o "\$tmp_dir/plugin.tar.gz"
+          mkdir -p "\$tmp_dir/extracted"
+          tar -xzf "\$tmp_dir/plugin.tar.gz" -C "\$tmp_dir/extracted"
+          rm -rf "\$install_dir"
+          mkdir -p "\$(dirname "\$install_dir")"
+          mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
+
+          codex plugin marketplace remove '${CODEX_MARKETPLACE_NAME}' >/dev/null 2>&1 || true
+          codex plugin marketplace add "\$install_dir"
+          codex plugin add '${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}'
+          echo "Installed ${CODEX_PLUGIN_NAME} for Codex from Gitea."
+          EOF
+          chmod +x "dist/install-${ARCHIVE_NAME}-codex-${VERSION}.sh"
 
       - name: Upload archive to Gitea
         if: inputs.publish_gitea
         id: gitea
         env:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
+          CLAUDE_PACKAGE_NAME: ${{ inputs.claude_package_name }}
+          CODEX_PACKAGE_NAME: ${{ inputs.codex_package_name }}
           GITEA_URL: ${{ inputs.gitea_url }}
           GITEA_USER: ${{ inputs.gitea_user }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
@@ -174,21 +252,33 @@ jobs:
           : "${GITEA_URL:?Set gitea_url when publish_gitea is enabled}"
           : "${GITEA_USER:?Set gitea_user when publish_gitea is enabled}"
           : "${GITEA_TOKEN:?Pass GITEA_TOKEN when publish_gitea is enabled}"
-          archive="${ARCHIVE_NAME}-${VERSION}.tar.gz"
-          package_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${ARCHIVE_NAME}/${VERSION}/${archive}"
-          curl --fail-with-body --retry 3 \
-            --user "${GITEA_USER}:${GITEA_TOKEN}" \
-            --upload-file "dist/${archive}" \
-            "$package_url"
-          echo "package_url=$package_url" >> "$GITHUB_OUTPUT"
-          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          claude_archive="${ARCHIVE_NAME}-claude-${VERSION}.tar.gz"
+          codex_archive="${ARCHIVE_NAME}-codex-${VERSION}.tar.gz"
+          claude_installer="install-${ARCHIVE_NAME}-claude-${VERSION}.sh"
+          codex_installer="install-${ARCHIVE_NAME}-codex-${VERSION}.sh"
+          claude_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CLAUDE_PACKAGE_NAME}/${VERSION}"
+          codex_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CODEX_PACKAGE_NAME}/${VERSION}"
+          for upload in \
+            "dist/${claude_archive}|${claude_base}/${claude_archive}" \
+            "dist/${claude_installer}|${claude_base}/${claude_installer}" \
+            "dist/${codex_archive}|${codex_base}/${codex_archive}" \
+            "dist/${codex_installer}|${codex_base}/${codex_installer}"; do
+            file="${upload%%|*}"
+            url="${upload#*|}"
+            curl --fail-with-body --retry 3 \
+              --user "${GITEA_USER}:${GITEA_TOKEN}" \
+              --upload-file "$file" \
+              "$url"
+          done
+          echo "claude_installer_url=${claude_base}/${claude_installer}" >> "$GITHUB_OUTPUT"
+          echo "codex_installer_url=${codex_base}/${codex_installer}" >> "$GITHUB_OUTPUT"
 
       - name: Upload archive to GitHub Release
         if: ${{ !inputs.publish_gitea }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/${{ inputs.archive_name }}-*.tar.gz
+          files: dist/*
 
       - name: Write GitHub installation summary
         env:
@@ -202,24 +292,40 @@ jobs:
           CODEX_PLUGIN_NAME: ${{ inputs.codex_plugin_name }}
           CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
           CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
-          GITEA_PACKAGE_URL: ${{ steps.gitea.outputs.package_url }}
-          GITEA_ARCHIVE: ${{ steps.gitea.outputs.archive }}
+          GITEA_CLAUDE_INSTALLER_URL: ${{ steps.gitea.outputs.claude_installer_url }}
+          GITEA_CODEX_INSTALLER_URL: ${{ steps.gitea.outputs.codex_installer_url }}
         run: |
           {
             printf '# Agent plugin %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
 
-            printf '## Claude Code\n\n'
-            printf '%s\n' '```bash'
-            printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
-            printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
-            printf '%s\n\n' '```'
+            if [[ -n "$GITEA_CLAUDE_INSTALLER_URL" && -n "$GITEA_CODEX_INSTALLER_URL" ]]; then
+              printf '## Claude Code\n\n'
+              printf '%s\n' '```bash'
+              printf 'curl --fail --location --output install-claude.sh "%s"\n' "$GITEA_CLAUDE_INSTALLER_URL"
+              printf 'chmod +x install-claude.sh\n'
+              printf './install-claude.sh\n'
+              printf '%s\n\n' '```'
 
-            printf '## Codex\n\n'
-            printf '%s\n' '```bash'
-            printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
-            printf 'codex plugin add %s@%s\n' "$CODEX_PLUGIN_NAME" "$CODEX_MARKETPLACE_NAME"
-            printf '%s\n\n' '```'
+              printf '## Codex\n\n'
+              printf '%s\n' '```bash'
+              printf 'curl --fail --location --output install-codex.sh "%s"\n' "$GITEA_CODEX_INSTALLER_URL"
+              printf 'chmod +x install-codex.sh\n'
+              printf './install-codex.sh\n'
+              printf '%s\n\n' '```'
+            else
+              printf '## Claude Code\n\n'
+              printf '%s\n' '```bash'
+              printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
+              printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
+              printf '%s\n\n' '```'
+
+              printf '## Codex\n\n'
+              printf '%s\n' '```bash'
+              printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
+              printf 'codex plugin add %s@%s\n' "$CODEX_PLUGIN_NAME" "$CODEX_MARKETPLACE_NAME"
+              printf '%s\n\n' '```'
+            fi
 
             printf '## OpenCode and Cursor\n\n'
             printf '%s\n' '```bash'
@@ -227,11 +333,7 @@ jobs:
             printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf '%s\n' '```'
 
-            if [[ -n "$GITEA_PACKAGE_URL" ]]; then
-              printf '\n## Gitea archive\n\n'
-              printf 'The release archive was also published to Gitea:\n\n%s\n\n' "$GITEA_PACKAGE_URL"
-              printf '%s\n' '```bash'
-              printf 'curl --user "GITEA_USER:GITEA_TOKEN" --output %s "%s"\n' "$GITEA_ARCHIVE" "$GITEA_PACKAGE_URL"
-              printf '%s\n' '```'
+            if [[ -n "$GITEA_CLAUDE_INSTALLER_URL" && -n "$GITEA_CODEX_INSTALLER_URL" ]]; then
+              printf '\nInstallers are public Gitea artifacts; no Gitea token is required.\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
