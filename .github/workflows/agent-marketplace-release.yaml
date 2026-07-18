@@ -209,35 +209,30 @@ jobs:
           CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
           CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
         run: |
-          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          # Agent marketplace ${VERSION}
+          {
+            printf '# Agent marketplace %s\n\n' "$VERSION"
+            printf 'Release tag: `%s`\n\n' "$TAG"
 
-          Release tag: \`${TAG}\`
+            printf '## Claude Code\n\n'
+            printf '%s\n' '```bash'
+            printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
+            printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
+            printf '%s\n\n' '```'
 
-          ## Claude Code
+            printf '## Codex\n\n'
+            printf '%s\n' '```bash'
+            printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
+            printf '%s\n' 'codex'
+            printf '# In Codex, run: /plugins and install %s.\n' "$CODEX_MARKETPLACE_NAME"
+            printf '%s\n\n' '```'
 
-          ```bash
-          claude plugin marketplace add ${REPOSITORY}@${TAG}
-          claude plugin install ${CLAUDE_PLUGIN_NAME}@${CLAUDE_MARKETPLACE_NAME}
-          ```
+            printf '## OpenCode\n\n'
+            printf '%s\n' '```bash'
+            printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\''\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf '%s\n\n' '```'
 
-          ## Codex
-
-          ```bash
-          codex plugin marketplace add ${REPOSITORY} --ref ${TAG}
-          codex
-          # In Codex, run: /plugins and install ${CODEX_MARKETPLACE_NAME}.
-          ```
-
-          ## OpenCode
-
-          ```bash
-          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent opencode --skill '*'
-          ```
-
-          ## Cursor
-
-          ```bash
-          npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent cursor --skill '*'
-          ```
-          EOF
+            printf '## Cursor\n\n'
+            printf '%s\n' '```bash'
+            printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\''\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
