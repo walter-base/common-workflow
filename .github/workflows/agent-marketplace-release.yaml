@@ -206,10 +206,13 @@ jobs:
           mkdir -p "\$(dirname "\$install_dir")"
           mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
 
+          marketplace_name="\$(jq -r '.name // empty' "\$install_dir/.claude-plugin/marketplace.json")"
+          : "\${marketplace_name:?Claude marketplace manifest is missing a name}"
           claude plugin marketplace remove '${CLAUDE_MARKETPLACE_NAME}' >/dev/null 2>&1 || true
+          claude plugin marketplace remove "\$marketplace_name" >/dev/null 2>&1 || true
           claude plugin marketplace add "\$install_dir"
-          claude plugin install '${CLAUDE_PLUGIN_NAME}@${CLAUDE_MARKETPLACE_NAME}'
-          echo "Installed ${CLAUDE_PLUGIN_NAME} for Claude Code from Gitea."
+          claude plugin install "${CLAUDE_PLUGIN_NAME}@\$marketplace_name"
+          echo "Installed ${CLAUDE_PLUGIN_NAME} for Claude Code from Gitea marketplace \$marketplace_name."
           EOF
           chmod +x "dist/install-${ARCHIVE_NAME}-claude-${VERSION}.sh"
 
@@ -230,10 +233,13 @@ jobs:
           mkdir -p "\$(dirname "\$install_dir")"
           mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
 
+          marketplace_name="\$(jq -r '.name // empty' "\$install_dir/.agents/plugins/marketplace.json")"
+          : "\${marketplace_name:?Codex marketplace manifest is missing a name}"
           codex plugin marketplace remove '${CODEX_MARKETPLACE_NAME}' >/dev/null 2>&1 || true
+          codex plugin marketplace remove "\$marketplace_name" >/dev/null 2>&1 || true
           codex plugin marketplace add "\$install_dir"
-          codex plugin add '${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}'
-          echo "Installed ${CODEX_PLUGIN_NAME} for Codex from Gitea."
+          codex plugin add "${CODEX_PLUGIN_NAME}@\$marketplace_name"
+          echo "Installed ${CODEX_PLUGIN_NAME} for Codex from Gitea marketplace \$marketplace_name."
           EOF
           chmod +x "dist/install-${ARCHIVE_NAME}-codex-${VERSION}.sh"
 
