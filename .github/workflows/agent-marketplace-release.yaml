@@ -163,6 +163,7 @@ jobs:
 
       - name: Upload archive to Gitea
         if: inputs.publish_gitea
+        id: gitea
         env:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
           GITEA_URL: ${{ inputs.gitea_url }}
@@ -179,20 +180,8 @@ jobs:
             --user "${GITEA_USER}:${GITEA_TOKEN}" \
             --upload-file "dist/${archive}" \
             "$package_url"
-
-          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          # Agent Marketplace ${VERSION}
-
-          Download the marketplace archive from Gitea:
-
-          ${package_url}
-
-          ```bash
-          curl --user "GITEA_USER:GITEA_TOKEN" \\
-            --output "${archive}" \\
-            "${package_url}"
-          ```
-          EOF
+          echo "package_url=$package_url" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Upload archive to GitHub Release
         if: ${{ !inputs.publish_gitea }}
@@ -202,7 +191,6 @@ jobs:
           files: dist/${{ inputs.archive_name }}-*.tar.gz
 
       - name: Write GitHub installation summary
-        if: ${{ !inputs.publish_gitea }}
         env:
           VERSION: ${{ needs.release-please.outputs.version }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
@@ -214,6 +202,8 @@ jobs:
           CODEX_PLUGIN_NAME: ${{ inputs.codex_plugin_name }}
           CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
           CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
+          GITEA_PACKAGE_URL: ${{ steps.gitea.outputs.package_url }}
+          GITEA_ARCHIVE: ${{ steps.gitea.outputs.archive }}
         run: |
           {
             printf '# Agent plugin %s\n\n' "$VERSION"
@@ -236,4 +226,12 @@ jobs:
             printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf '%s\n' '```'
+
+            if [[ -n "$GITEA_PACKAGE_URL" ]]; then
+              printf '\n## Gitea archive\n\n'
+              printf 'The release archive was also published to Gitea:\n\n%s\n\n' "$GITEA_PACKAGE_URL"
+              printf '%s\n' '```bash'
+              printf 'curl --user "GITEA_USER:GITEA_TOKEN" --output %s "%s"\n' "$GITEA_ARCHIVE" "$GITEA_PACKAGE_URL"
+              printf '%s\n' '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
