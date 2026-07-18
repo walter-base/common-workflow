@@ -371,16 +371,14 @@ jobs:
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## Claude Code\n\n'
               printf '%s\n' '```bash'
-              printf 'curl --fail --location --output install-claude.sh "%s"\n' "$GITEA_INSTALLER_URL"
-              printf 'chmod +x install-claude.sh\n'
-              printf './install-claude.sh claude\n'
+              printf 'curl --fail --location --output install-%s.sh "%s"\n' "$ARCHIVE_NAME" "$GITEA_INSTALLER_URL"
+              printf 'chmod +x install-%s.sh\n' "$ARCHIVE_NAME"
+              printf './install-%s.sh claude\n' "$ARCHIVE_NAME"
               printf '%s\n\n' '```'
 
               printf '## Codex\n\n'
               printf '%s\n' '```bash'
-              printf 'curl --fail --location --output install-codex.sh "%s"\n' "$GITEA_INSTALLER_URL"
-              printf 'chmod +x install-codex.sh\n'
-              printf './install-codex.sh codex\n'
+              printf './install-%s.sh codex\n' "$ARCHIVE_NAME"
               printf '%s\n\n' '```'
             else
               printf '## Claude Code\n\n'
@@ -399,16 +397,12 @@ jobs:
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## OpenCode\n\n'
               printf '%s\n' '```bash'
-              printf 'curl --fail --location --output install-opencode.sh "%s"\n' "$GITEA_INSTALLER_URL"
-              printf 'chmod +x install-opencode.sh\n'
-              printf './install-opencode.sh opencode\n'
+              printf './install-%s.sh opencode\n' "$ARCHIVE_NAME"
               printf '%s\n\n' '```'
 
               printf '## Cursor\n\n'
               printf '%s\n' '```bash'
-              printf 'curl --fail --location --output install-cursor.sh "%s"\n' "$GITEA_INSTALLER_URL"
-              printf 'chmod +x install-cursor.sh\n'
-              printf './install-cursor.sh cursor\n'
+              printf './install-%s.sh cursor\n' "$ARCHIVE_NAME"
               printf '%s\n\n' '```'
             else
               printf '## OpenCode and Cursor\n\n'
