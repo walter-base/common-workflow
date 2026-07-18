@@ -58,6 +58,11 @@ on:
         required: false
         type: string
         default: marketplace
+      codex_plugin_name:
+        description: Codex plugin name used in the installation summary.
+        required: false
+        type: string
+        default: marketplace
       claude_marketplace_name:
         description: Claude marketplace name used in the installation summary.
         required: false
@@ -204,15 +209,30 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           SKILL_ROOT: ${{ inputs.skill_root }}
+          CLAUDE_PLUGIN_NAME: ${{ inputs.claude_plugin_name }}
+          CLAUDE_MARKETPLACE_NAME: ${{ inputs.claude_marketplace_name }}
+          CODEX_PLUGIN_NAME: ${{ inputs.codex_plugin_name }}
+          CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
+          CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
         run: |
           {
-            printf '# Agent skills %s\n\n' "$VERSION"
+            printf '# Agent plugin %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
 
-            printf '## Install skills\n\n'
+            printf '## Claude Code\n\n'
             printf '%s\n' '```bash'
-            printf 'npx skills add %s/%s/tree/%s/%s --agent claude-code --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
-            printf 'npx skills add %s/%s/tree/%s/%s --agent codex --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
+            printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
+            printf '%s\n\n' '```'
+
+            printf '## Codex\n\n'
+            printf '%s\n' '```bash'
+            printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
+            printf 'codex plugin add %s@%s\n' "$CODEX_PLUGIN_NAME" "$CODEX_MARKETPLACE_NAME"
+            printf '%s\n\n' '```'
+
+            printf '## OpenCode and Cursor\n\n'
+            printf '%s\n' '```bash'
             printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf '%s\n' '```'
