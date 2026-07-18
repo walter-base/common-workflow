@@ -197,6 +197,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           SKILL_ROOT: ${{ inputs.skill_root }}
+          GITEA_URL: ${{ inputs.gitea_url }}
+          GITEA_USER: ${{ inputs.gitea_user }}
           CLAUDE_PLUGIN_NAME: ${{ inputs.claude_plugin_name }}
           CLAUDE_MARKETPLACE_NAME: ${{ inputs.claude_marketplace_name }}
           CODEX_PLUGIN_NAME: ${{ inputs.codex_plugin_name }}
@@ -206,18 +208,25 @@ jobs:
           GITEA_ARCHIVE: ${{ steps.gitea.outputs.archive }}
         run: |
           {
+            repo_name="${REPOSITORY##*/}"
+            if [[ -n "$GITEA_URL" && -n "$GITEA_USER" ]]; then
+              plugin_source="${GITEA_URL%/}/${GITEA_USER}/${repo_name}.git"
+            else
+              plugin_source="${SERVER_URL}/${REPOSITORY}.git"
+            fi
+
             printf '# Agent plugin %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
 
             printf '## Claude Code\n\n'
             printf '%s\n' '```bash'
-            printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
+            printf 'claude plugin marketplace add %s@%s\n' "$plugin_source" "$TAG"
             printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
             printf '%s\n\n' '```'
 
             printf '## Codex\n\n'
             printf '%s\n' '```bash'
-            printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
+            printf 'codex plugin marketplace add %s --ref %s\n' "$plugin_source" "$TAG"
             printf 'codex plugin add %s@%s\n' "$CODEX_PLUGIN_NAME" "$CODEX_MARKETPLACE_NAME"
             printf '%s\n\n' '```'
 
