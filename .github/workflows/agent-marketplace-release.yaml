@@ -63,6 +63,16 @@ on:
         required: false
         type: string
         default: agent-marketplace-codex
+      opencode_package_name:
+        description: Public Gitea generic package name for the OpenCode release artifact.
+        required: false
+        type: string
+        default: agent-marketplace-opencode
+      cursor_package_name:
+        description: Public Gitea generic package name for the Cursor release artifact.
+        required: false
+        type: string
+        default: agent-marketplace-cursor
       claude_plugin_name:
         description: Claude plugin name used in the installation summary.
         required: false
@@ -89,7 +99,7 @@ on:
         type: string
         default: marketplace
       publish_gitea:
-        description: Upload public Claude and Codex installer packages to Gitea.
+        description: Upload public installers for Claude, Codex, OpenCode, and Cursor to Gitea.
         required: false
         type: boolean
         default: false
@@ -171,6 +181,8 @@ jobs:
           done
           tar -czf "dist/${ARCHIVE_NAME}-claude-${VERSION}.tar.gz" -C dist "${dir}"
           tar -czf "dist/${ARCHIVE_NAME}-codex-${VERSION}.tar.gz" -C dist "${dir}"
+          tar -czf "dist/${ARCHIVE_NAME}-opencode-${VERSION}.tar.gz" -C dist "${dir}"
+          tar -czf "dist/${ARCHIVE_NAME}-cursor-${VERSION}.tar.gz" -C dist "${dir}"
 
       - name: Build Gitea installers
         if: inputs.publish_gitea
@@ -178,6 +190,8 @@ jobs:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
           CLAUDE_PACKAGE_NAME: ${{ inputs.claude_package_name }}
           CODEX_PACKAGE_NAME: ${{ inputs.codex_package_name }}
+          OPENCODE_PACKAGE_NAME: ${{ inputs.opencode_package_name }}
+          CURSOR_PACKAGE_NAME: ${{ inputs.cursor_package_name }}
           GITEA_URL: ${{ inputs.gitea_url }}
           GITEA_USER: ${{ inputs.gitea_user }}
           VERSION: ${{ needs.release-please.outputs.version }}
@@ -243,6 +257,50 @@ jobs:
           EOF
           chmod +x "dist/install-${ARCHIVE_NAME}-codex-${VERSION}.sh"
 
+          cat > "dist/install-${ARCHIVE_NAME}-opencode-${VERSION}.sh" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          version="\${1:-${VERSION}}"
+          install_dir="\${MEDIVA_PLUGIN_DIR:-\$HOME/.local/share/${ARCHIVE_NAME}/opencode}"
+          archive_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${OPENCODE_PACKAGE_NAME}/\${version}/${ARCHIVE_NAME}-opencode-\${version}.tar.gz"
+          tmp_dir="\$(mktemp -d)"
+          trap 'rm -rf "\$tmp_dir"' EXIT
+
+          curl --fail --location --retry 3 "\$archive_url" -o "\$tmp_dir/plugin.tar.gz"
+          mkdir -p "\$tmp_dir/extracted"
+          tar -xzf "\$tmp_dir/plugin.tar.gz" -C "\$tmp_dir/extracted"
+          rm -rf "\$install_dir"
+          mkdir -p "\$(dirname "\$install_dir")"
+          mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
+
+          npx --yes skills add "\$install_dir/skills" --agent opencode --skill '*' --yes --global
+          echo "Installed skills for OpenCode from Gitea."
+          EOF
+          chmod +x "dist/install-${ARCHIVE_NAME}-opencode-${VERSION}.sh"
+
+          cat > "dist/install-${ARCHIVE_NAME}-cursor-${VERSION}.sh" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          version="\${1:-${VERSION}}"
+          install_dir="\${MEDIVA_PLUGIN_DIR:-\$HOME/.local/share/${ARCHIVE_NAME}/cursor}"
+          archive_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CURSOR_PACKAGE_NAME}/\${version}/${ARCHIVE_NAME}-cursor-\${version}.tar.gz"
+          tmp_dir="\$(mktemp -d)"
+          trap 'rm -rf "\$tmp_dir"' EXIT
+
+          curl --fail --location --retry 3 "\$archive_url" -o "\$tmp_dir/plugin.tar.gz"
+          mkdir -p "\$tmp_dir/extracted"
+          tar -xzf "\$tmp_dir/plugin.tar.gz" -C "\$tmp_dir/extracted"
+          rm -rf "\$install_dir"
+          mkdir -p "\$(dirname "\$install_dir")"
+          mv "\$tmp_dir/extracted/${ARCHIVE_NAME}-\${version}" "\$install_dir"
+
+          npx --yes skills add "\$install_dir/skills" --agent cursor --skill '*' --yes --global
+          echo "Installed skills for Cursor from Gitea."
+          EOF
+          chmod +x "dist/install-${ARCHIVE_NAME}-cursor-${VERSION}.sh"
+
       - name: Upload archive to Gitea
         if: inputs.publish_gitea
         id: gitea
@@ -250,6 +308,8 @@ jobs:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
           CLAUDE_PACKAGE_NAME: ${{ inputs.claude_package_name }}
           CODEX_PACKAGE_NAME: ${{ inputs.codex_package_name }}
+          OPENCODE_PACKAGE_NAME: ${{ inputs.opencode_package_name }}
+          CURSOR_PACKAGE_NAME: ${{ inputs.cursor_package_name }}
           GITEA_URL: ${{ inputs.gitea_url }}
           GITEA_USER: ${{ inputs.gitea_user }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
@@ -260,15 +320,25 @@ jobs:
           : "${GITEA_TOKEN:?Pass GITEA_TOKEN when publish_gitea is enabled}"
           claude_archive="${ARCHIVE_NAME}-claude-${VERSION}.tar.gz"
           codex_archive="${ARCHIVE_NAME}-codex-${VERSION}.tar.gz"
+          opencode_archive="${ARCHIVE_NAME}-opencode-${VERSION}.tar.gz"
+          cursor_archive="${ARCHIVE_NAME}-cursor-${VERSION}.tar.gz"
           claude_installer="install-${ARCHIVE_NAME}-claude-${VERSION}.sh"
           codex_installer="install-${ARCHIVE_NAME}-codex-${VERSION}.sh"
+          opencode_installer="install-${ARCHIVE_NAME}-opencode-${VERSION}.sh"
+          cursor_installer="install-${ARCHIVE_NAME}-cursor-${VERSION}.sh"
           claude_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CLAUDE_PACKAGE_NAME}/${VERSION}"
           codex_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CODEX_PACKAGE_NAME}/${VERSION}"
+          opencode_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${OPENCODE_PACKAGE_NAME}/${VERSION}"
+          cursor_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${CURSOR_PACKAGE_NAME}/${VERSION}"
           for upload in \
             "dist/${claude_archive}|${claude_base}/${claude_archive}" \
             "dist/${claude_installer}|${claude_base}/${claude_installer}" \
             "dist/${codex_archive}|${codex_base}/${codex_archive}" \
-            "dist/${codex_installer}|${codex_base}/${codex_installer}"; do
+            "dist/${codex_installer}|${codex_base}/${codex_installer}" \
+            "dist/${opencode_archive}|${opencode_base}/${opencode_archive}" \
+            "dist/${opencode_installer}|${opencode_base}/${opencode_installer}" \
+            "dist/${cursor_archive}|${cursor_base}/${cursor_archive}" \
+            "dist/${cursor_installer}|${cursor_base}/${cursor_installer}"; do
             file="${upload%%|*}"
             url="${upload#*|}"
             curl --fail-with-body --retry 3 \
@@ -278,6 +348,8 @@ jobs:
           done
           echo "claude_installer_url=${claude_base}/${claude_installer}" >> "$GITHUB_OUTPUT"
           echo "codex_installer_url=${codex_base}/${codex_installer}" >> "$GITHUB_OUTPUT"
+          echo "opencode_installer_url=${opencode_base}/${opencode_installer}" >> "$GITHUB_OUTPUT"
+          echo "cursor_installer_url=${cursor_base}/${cursor_installer}" >> "$GITHUB_OUTPUT"
 
       - name: Upload archive to GitHub Release
         if: ${{ !inputs.publish_gitea }}
@@ -300,12 +372,14 @@ jobs:
           CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
           GITEA_CLAUDE_INSTALLER_URL: ${{ steps.gitea.outputs.claude_installer_url }}
           GITEA_CODEX_INSTALLER_URL: ${{ steps.gitea.outputs.codex_installer_url }}
+          GITEA_OPENCODE_INSTALLER_URL: ${{ steps.gitea.outputs.opencode_installer_url }}
+          GITEA_CURSOR_INSTALLER_URL: ${{ steps.gitea.outputs.cursor_installer_url }}
         run: |
           {
             printf '# Agent plugin %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
 
-            if [[ -n "$GITEA_CLAUDE_INSTALLER_URL" && -n "$GITEA_CODEX_INSTALLER_URL" ]]; then
+            if [[ -n "$GITEA_CLAUDE_INSTALLER_URL" && -n "$GITEA_CODEX_INSTALLER_URL" && -n "$GITEA_OPENCODE_INSTALLER_URL" && -n "$GITEA_CURSOR_INSTALLER_URL" ]]; then
               printf '## Claude Code\n\n'
               printf '%s\n' '```bash'
               printf 'curl --fail --location --output install-claude.sh "%s"\n' "$GITEA_CLAUDE_INSTALLER_URL"
@@ -333,11 +407,27 @@ jobs:
               printf '%s\n\n' '```'
             fi
 
-            printf '## OpenCode and Cursor\n\n'
-            printf '%s\n' '```bash'
-            printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
-            printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
-            printf '%s\n' '```'
+            if [[ -n "$GITEA_OPENCODE_INSTALLER_URL" && -n "$GITEA_CURSOR_INSTALLER_URL" ]]; then
+              printf '## OpenCode\n\n'
+              printf '%s\n' '```bash'
+              printf 'curl --fail --location --output install-opencode.sh "%s"\n' "$GITEA_OPENCODE_INSTALLER_URL"
+              printf 'chmod +x install-opencode.sh\n'
+              printf './install-opencode.sh\n'
+              printf '%s\n\n' '```'
+
+              printf '## Cursor\n\n'
+              printf '%s\n' '```bash'
+              printf 'curl --fail --location --output install-cursor.sh "%s"\n' "$GITEA_CURSOR_INSTALLER_URL"
+              printf 'chmod +x install-cursor.sh\n'
+              printf './install-cursor.sh\n'
+              printf '%s\n\n' '```'
+            else
+              printf '## OpenCode and Cursor\n\n'
+              printf '%s\n' '```bash'
+              printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+              printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+              printf '%s\n' '```'
+            fi
 
             if [[ -n "$GITEA_CLAUDE_INSTALLER_URL" && -n "$GITEA_CODEX_INSTALLER_URL" ]]; then
               printf '\nInstallers are public Gitea artifacts; no Gitea token is required.\n'
