@@ -182,12 +182,27 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
 
-          agent="\${1:-}"
+          command="\${1:-}"
+          agent="\$command"
           version="\${2:-${VERSION}}"
+          if [[ "\$command" == update ]]; then
+            agent="\${2:-all}"
+            version="latest"
+          fi
+          if [[ "\$command" == update && "\$agent" == all ]]; then
+            for target in claude codex opencode cursor; do
+              "\$0" "\$target" latest
+            done
+            exit 0
+          fi
           case "\$agent" in
             claude|codex|opencode|cursor) ;;
-            *) echo "Usage: \$0 {claude|codex|opencode|cursor} [version]" >&2; exit 2 ;;
+            *) echo "Usage: \$0 {claude|codex|opencode|cursor} [version] | update [agent|all]" >&2; exit 2 ;;
           esac
+          if [[ "\$version" == latest ]]; then
+            version="\$(curl --fail --location --retry 3 "${GITEA_URL%/}/api/v1/packages/${GITEA_USER}/generic/${GITEA_PACKAGE_NAME}/-/latest" | jq -r '.version // empty')"
+            : "\${version:?Gitea did not return a latest package version}"
+          fi
           install_dir="\${MEDIVA_PLUGIN_DIR:-\$HOME/.local/share/${ARCHIVE_NAME}/\$agent}"
           archive_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${GITEA_PACKAGE_NAME}/\${version}/${ARCHIVE_NAME}-\${version}.tar.gz"
           tmp_dir="\$(mktemp -d)"
@@ -338,6 +353,7 @@ jobs:
         env:
           VERSION: ${{ needs.release-please.outputs.version }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           SKILL_ROOT: ${{ inputs.skill_root }}
@@ -403,6 +419,9 @@ jobs:
             fi
 
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
-              printf '\nInstallers are public Gitea artifacts; no Gitea token is required.\n'
+              printf '\nUpdate all installed agents later with:\n\n%s\n\n' '```bash'
+              printf './install-%s-%s.sh update all\n' "$ARCHIVE_NAME" "$VERSION"
+              printf '%s\n' '```'
+              printf 'Installers are public Gitea artifacts; no Gitea token is required.\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
