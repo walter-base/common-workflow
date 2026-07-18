@@ -3,6 +3,11 @@ name: Agent marketplace release
 on:
   workflow_call:
     inputs:
+      target_branch:
+        description: Branch that receives release-please changes.
+        required: false
+        type: string
+        default: main
       skill_root:
         description: Canonical skill directory relative to the repository root.
         required: false
@@ -22,10 +27,12 @@ on:
         description: Codex plugin root relative to the repository root.
         required: false
         type: string
+        default: plugins/marketplace
       cursor_plugin_root:
         description: Cursor plugin root relative to the repository root.
         required: false
         type: string
+        default: plugins/marketplace
       release_config_file:
         description: Release Please configuration file.
         required: false
@@ -66,6 +73,29 @@ on:
         required: false
         type: string
         default: marketplace
+      publish_gitea:
+        description: Upload the released archive to Gitea and write its URL to the summary.
+        required: false
+        type: boolean
+        default: false
+      gitea_url:
+        description: Base URL of the Gitea instance.
+        required: false
+        type: string
+        default: ""
+      gitea_user:
+        description: Gitea user or organization that owns the generic package.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GITHUB_PAT:
+        description: Optional GitHub token for release-please pull requests.
+        required: false
+      GITEA_TOKEN:
+        description: Gitea token with permission to publish generic packages.
+        required: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -86,8 +116,8 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v4
         with:
-          token: ${{ github.token }}
-          target-branch: ${{ github.event.repository.default_branch || 'master' }}
+          token: ${{ secrets.GITHUB_PAT || github.token }}
+          target-branch: ${{ inputs.target_branch }}
           config-file: ${{ inputs.release_config_file }}
           manifest-file: ${{ inputs.release_manifest_file }}
 
@@ -102,6 +132,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
+
       - name: Validate released marketplace
         uses: walter-base/common-workflow/actions/validate-agent-marketplace@master
         with:
@@ -110,6 +141,7 @@ jobs:
           claude_plugin_file: ${{ inputs.claude_plugin_file }}
           codex_plugin_root: ${{ inputs.codex_plugin_root }}
           cursor_plugin_root: ${{ inputs.cursor_plugin_root }}
+
       - name: Build release archive
         env:
           VERSION: ${{ needs.release-please.outputs.version }}
@@ -123,7 +155,49 @@ jobs:
             cp -R "$path" "dist/${dir}/"
           done
           tar -czf "dist/${dir}.tar.gz" -C dist "${dir}"
-      - name: Write installation summary
+
+      - name: Upload archive to Gitea
+        if: inputs.publish_gitea
+        env:
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
+          GITEA_URL: ${{ inputs.gitea_url }}
+          GITEA_USER: ${{ inputs.gitea_user }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          : "${GITEA_URL:?Set gitea_url when publish_gitea is enabled}"
+          : "${GITEA_USER:?Set gitea_user when publish_gitea is enabled}"
+          : "${GITEA_TOKEN:?Pass GITEA_TOKEN when publish_gitea is enabled}"
+          archive="${ARCHIVE_NAME}-${VERSION}.tar.gz"
+          package_url="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${ARCHIVE_NAME}/${VERSION}/${archive}"
+          curl --fail-with-body --retry 3 \
+            --user "${GITEA_USER}:${GITEA_TOKEN}" \
+            --upload-file "dist/${archive}" \
+            "$package_url"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Agent Marketplace ${VERSION}
+
+          Download the marketplace archive from Gitea:
+
+          ${package_url}
+
+          ```bash
+          curl --user "GITEA_USER:GITEA_TOKEN" \\
+            --output "${archive}" \\
+            "${package_url}"
+          ```
+          EOF
+
+      - name: Upload archive to GitHub Release
+        if: ${{ !inputs.publish_gitea }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: dist/${{ inputs.archive_name }}-*.tar.gz
+
+      - name: Write GitHub installation summary
+        if: ${{ !inputs.publish_gitea }}
         env:
           VERSION: ${{ needs.release-please.outputs.version }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
@@ -142,33 +216,28 @@ jobs:
 
           ## Claude Code
 
-          \`\`\`bash
+          ```bash
           claude plugin marketplace add ${REPOSITORY}@${TAG}
           claude plugin install ${CLAUDE_PLUGIN_NAME}@${CLAUDE_MARKETPLACE_NAME}
-          \`\`\`
+          ```
 
           ## Codex
 
-          \`\`\`bash
+          ```bash
           codex plugin marketplace add ${REPOSITORY} --ref ${TAG}
           codex
           # In Codex, run: /plugins and install ${CODEX_MARKETPLACE_NAME}.
-          \`\`\`
+          ```
 
           ## OpenCode
 
-          \`\`\`bash
+          ```bash
           npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent opencode --skill '*'
-          \`\`\`
+          ```
 
           ## Cursor
 
-          \`\`\`bash
+          ```bash
           npx skills add ${SERVER_URL}/${REPOSITORY}/tree/${TAG}/${SKILL_ROOT} --agent cursor --skill '*'
-          \`\`\`
+          ```
           EOF
-      - name: Upload archive to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/${{ inputs.archive_name }}-*.tar.gz
