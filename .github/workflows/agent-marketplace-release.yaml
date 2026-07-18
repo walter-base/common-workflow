@@ -204,35 +204,16 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           SKILL_ROOT: ${{ inputs.skill_root }}
-          CLAUDE_PLUGIN_NAME: ${{ inputs.claude_plugin_name }}
-          CLAUDE_MARKETPLACE_NAME: ${{ inputs.claude_marketplace_name }}
-          CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
-          CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
         run: |
           {
-            printf '# Agent marketplace %s\n\n' "$VERSION"
+            printf '# Agent skills %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
 
-            printf '## Claude Code\n\n'
+            printf '## Install skills\n\n'
             printf '%s\n' '```bash'
-            printf 'claude plugin marketplace add %s@%s\n' "$REPOSITORY" "$TAG"
-            printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
-            printf '%s\n\n' '```'
-
-            printf '## Codex\n\n'
-            printf '%s\n' '```bash'
-            printf 'codex plugin marketplace add %s --ref %s\n' "$REPOSITORY" "$TAG"
-            printf '%s\n' 'codex'
-            printf '# In Codex, run: /plugins and install %s.\n' "$CODEX_MARKETPLACE_NAME"
-            printf '%s\n\n' '```'
-
-            printf '## OpenCode\n\n'
-            printf '%s\n' '```bash'
-            printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\''\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
-            printf '%s\n\n' '```'
-
-            printf '## Cursor\n\n'
-            printf '%s\n' '```bash'
-            printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\''\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf 'npx skills add %s/%s/tree/%s/%s --agent claude-code --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf 'npx skills add %s/%s/tree/%s/%s --agent codex --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf 'npx skills add %s/%s/tree/%s/%s --agent opencode --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
+            printf 'npx skills add %s/%s/tree/%s/%s --agent cursor --skill '\''*'\'' --yes --global\n' "$SERVER_URL" "$REPOSITORY" "$TAG" "$SKILL_ROOT"
             printf '%s\n' '```'
           } >> "$GITHUB_STEP_SUMMARY"
