@@ -371,14 +371,12 @@ jobs:
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## Claude Code\n\n'
               printf '%s\n' '```bash'
-              printf 'curl --fail --location --output install-%s.sh "%s"\n' "$ARCHIVE_NAME" "$GITEA_INSTALLER_URL"
-              printf 'chmod +x install-%s.sh\n' "$ARCHIVE_NAME"
-              printf './install-%s.sh claude\n' "$ARCHIVE_NAME"
+              printf 'curl --fail --location --retry 3 "%s" | bash -s -- claude\n' "$GITEA_INSTALLER_URL"
               printf '%s\n\n' '```'
 
               printf '## Codex\n\n'
               printf '%s\n' '```bash'
-              printf './install-%s.sh codex\n' "$ARCHIVE_NAME"
+              printf 'curl --fail --location --retry 3 "%s" | bash -s -- codex\n' "$GITEA_INSTALLER_URL"
               printf '%s\n\n' '```'
             else
               printf '## Claude Code\n\n'
@@ -397,12 +395,12 @@ jobs:
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## OpenCode\n\n'
               printf '%s\n' '```bash'
-              printf './install-%s.sh opencode\n' "$ARCHIVE_NAME"
+              printf 'curl --fail --location --retry 3 "%s" | bash -s -- opencode\n' "$GITEA_INSTALLER_URL"
               printf '%s\n\n' '```'
 
               printf '## Cursor\n\n'
               printf '%s\n' '```bash'
-              printf './install-%s.sh cursor\n' "$ARCHIVE_NAME"
+              printf 'curl --fail --location --retry 3 "%s" | bash -s -- cursor\n' "$GITEA_INSTALLER_URL"
               printf '%s\n\n' '```'
             else
               printf '## OpenCode and Cursor\n\n'
@@ -414,7 +412,7 @@ jobs:
 
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '\nUpdate all installed agents later with:\n\n%s\n\n' '```bash'
-              printf './install-%s-%s.sh update all\n' "$ARCHIVE_NAME" "$VERSION"
+              printf 'curl --fail --location --retry 3 "%s" | bash -s -- update all\n' "$GITEA_INSTALLER_URL"
               printf '%s\n' '```'
               printf 'Installers are public Gitea artifacts; no Gitea token is required.\n'
             fi
