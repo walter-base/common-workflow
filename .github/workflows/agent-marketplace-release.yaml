@@ -98,12 +98,40 @@ on:
         required: false
         type: string
         default: ""
+      publish_npm:
+        description: >-
+          Publish the release contents as an npm package so agents that support npm
+          marketplace catalogs can install and auto-update from the registry.
+        required: false
+        type: boolean
+        default: false
+      npm_package_name:
+        description: >-
+          Scoped npm package name, for example `@acme/agent-skills`. A scope is
+          required because it is what routes installs to the registry, but it does
+          not have to match the registry owner. Required when publish_npm is enabled.
+        required: false
+        type: string
+        default: ""
+      npm_registry:
+        description: >-
+          npm registry base URL, for example
+          `https://gitea.example.com/api/packages/acme/npm/`. Defaults to the Gitea
+          npm registry for gitea_user when gitea_url is set.
+        required: false
+        type: string
+        default: ""
     secrets:
       GITHUB_PAT:
         description: Optional GitHub token for release-please pull requests.
         required: false
       GITEA_TOKEN:
         description: Gitea token with permission to publish generic packages.
+        required: false
+      NPM_TOKEN:
+        description: >-
+          Token for the npm registry. Falls back to GITEA_TOKEN when unset, which
+          covers publishing to a Gitea npm registry.
         required: false
 
 permissions:
@@ -165,6 +193,93 @@ jobs:
             cp -R "$path" "dist/${dir}/"
           done
           tar -czf "dist/${ARCHIVE_NAME}-${VERSION}.tar.gz" -C dist "${dir}"
+
+      - name: Set up Node
+        if: inputs.publish_npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish npm package
+        if: inputs.publish_npm
+        id: npm
+        env:
+          ARCHIVE_NAME: ${{ inputs.archive_name }}
+          GITEA_URL: ${{ inputs.gitea_url }}
+          GITEA_USER: ${{ inputs.gitea_user }}
+          NPM_PACKAGE_NAME: ${{ inputs.npm_package_name }}
+          NPM_REGISTRY: ${{ inputs.npm_registry }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITEA_TOKEN }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${NPM_PACKAGE_NAME:?Set npm_package_name when publish_npm is enabled}"
+          : "${NPM_TOKEN:?Pass NPM_TOKEN or GITEA_TOKEN when publish_npm is enabled}"
+
+          registry="${NPM_REGISTRY}"
+          if [[ -z "$registry" ]]; then
+            : "${GITEA_URL:?Set npm_registry, or gitea_url and gitea_user, when publish_npm is enabled}"
+            : "${GITEA_USER:?Set npm_registry, or gitea_url and gitea_user, when publish_npm is enabled}"
+            registry="${GITEA_URL%/}/api/packages/${GITEA_USER}/npm/"
+          fi
+          [[ "$registry" == */ ]] || registry="${registry}/"
+
+          scope="${NPM_PACKAGE_NAME%%/*}"
+          if [[ "$scope" != @* ]]; then
+            echo "npm_package_name must be scoped (for example @acme/agent-skills) so the registry mapping is unambiguous" >&2
+            exit 1
+          fi
+
+          # The staged directory already holds exactly the released content, so the npm
+          # package and the generic archive can never drift apart.
+          pkg_dir="dist/${ARCHIVE_NAME}-${VERSION}"
+          files_json="$(printf '%s\n' ${PACKAGE_PATHS} | jq -R . | jq -s .)"
+          jq -n \
+            --arg name "$NPM_PACKAGE_NAME" \
+            --arg version "$VERSION" \
+            --argjson files "$files_json" \
+            '{name: $name, version: $version, files: $files, private: false}' \
+            > "${pkg_dir}/package.json"
+
+          # `npm pack <path>` without a leading `./` is parsed as a GitHub owner/repo
+          # spec, so npm tries to clone it instead of packing the directory.
+          tarball_name="$(npm pack --pack-destination dist "./${pkg_dir}")"
+          : "${tarball_name:?npm pack did not produce a tarball}"
+          tarball="dist/${tarball_name}"
+
+          # npm's default ignore rules have historically surprised people with
+          # dot-directories, and the agent catalogs live in `.agents/` and
+          # `.claude-plugin/`. Fail here rather than shipping an unusable package.
+          contents="$(tar -tzf "$tarball")"
+          missing=0
+          for path in ${PACKAGE_PATHS}; do
+            [[ -e "$path" ]] || continue
+            if ! grep -q "^package/${path}" <<<"$contents"; then
+              echo "npm package is missing released path: ${path}" >&2
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            echo "Refusing to publish an npm package that does not match the release archive." >&2
+            exit 1
+          fi
+
+          registry_auth="${registry#https://}"
+          registry_auth="${registry_auth#http://}"
+          {
+            printf '%s:registry=%s\n' "$scope" "$registry"
+            printf '//%s:_authToken=%s\n' "$registry_auth" "$NPM_TOKEN"
+          } > "$HOME/.npmrc"
+          trap 'rm -f "$HOME/.npmrc"' EXIT
+
+          npm publish "./${tarball}" --registry "$registry"
+          # Keep the packed tarball out of the GitHub Release upload glob.
+          rm -f "$tarball"
+
+          echo "npm_package=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "npm_registry=${registry}" >> "$GITHUB_OUTPUT"
 
       - name: Build Gitea installers
         if: inputs.publish_gitea
@@ -363,10 +478,23 @@ jobs:
           CODEX_MARKETPLACE_NAME: ${{ inputs.codex_marketplace_name }}
           CURSOR_PLUGIN_NAME: ${{ inputs.cursor_plugin_name }}
           GITEA_INSTALLER_URL: ${{ steps.gitea.outputs.installer_url }}
+          NPM_PACKAGE: ${{ steps.npm.outputs.npm_package }}
+          NPM_REGISTRY_URL: ${{ steps.npm.outputs.npm_registry }}
         run: |
           {
             printf '# Agent plugin %s\n\n' "$VERSION"
             printf 'Release tag: `%s`\n\n' "$TAG"
+
+            if [[ -n "$NPM_PACKAGE" ]]; then
+              printf '## npm registry\n\n'
+              printf 'Published `%s@%s` to `%s`.\n\n' "$NPM_PACKAGE" "$VERSION" "$NPM_REGISTRY_URL"
+              printf 'Agents that support npm marketplace catalogs can install this package '
+              printf 'directly and pick up later releases without re-running an installer. '
+              printf 'Authenticate first if the registry is private:\n\n'
+              printf '%s\n' '```bash'
+              printf 'npm config set %s:registry %s\n' "${NPM_PACKAGE%%/*}" "$NPM_REGISTRY_URL"
+              printf '%s\n\n' '```'
+            fi
 
             if [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## Claude Code\n\n'
