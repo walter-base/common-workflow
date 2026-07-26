@@ -107,8 +107,9 @@ on:
         default: false
       npm_package_name:
         description: >-
-          Scoped npm package name, for example `@acme/agent-skills`. The scope must
-          match the registry owner. Required when publish_npm is enabled.
+          Scoped npm package name, for example `@acme/agent-skills`. A scope is
+          required because it is what routes installs to the registry, but it does
+          not have to match the registry owner. Required when publish_npm is enabled.
         required: false
         type: string
         default: ""

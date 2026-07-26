@@ -55,7 +55,9 @@ Notes:
   the two can never drift apart
 - `package.json` is generated at publish time with the release version, which
   keeps it in step with the plugin manifest versions that release-please bumps
-- `npm_package_name` must be scoped, and the scope must match the registry owner
+- `npm_package_name` must be scoped, because the scope is what routes installs to
+  the registry in `.npmrc`. The scope does not have to match the registry owner:
+  Gitea's own example maps an `@test` scope to a `testuser` registry URL
 - `NPM_TOKEN` is used when set; otherwise `GITEA_TOKEN` is reused
 - publishing fails if any released path is absent from the packed tarball, which
   guards against npm's ignore rules silently dropping `.agents/` or
