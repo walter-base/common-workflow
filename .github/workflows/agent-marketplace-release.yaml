@@ -48,6 +48,11 @@ on:
         required: false
         type: string
         default: skills .claude-plugin .cursor-plugin .agents plugins README.md CHANGELOG.md
+      catalog_file:
+        description: Optional catalog metadata JSON file to publish beside the release artifacts.
+        required: false
+        type: string
+        default: ""
       archive_name:
         description: Prefix used for the release archive.
         required: true
@@ -183,13 +188,19 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.version }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
           ARCHIVE_NAME: ${{ inputs.archive_name }}
+          CATALOG_FILE: ${{ inputs.catalog_file }}
         shell: bash
         run: |
+          set -euo pipefail
           dir="${ARCHIVE_NAME}-${VERSION}"
           mkdir -p "dist/${dir}"
           for path in ${PACKAGE_PATHS}; do
             cp -R "$path" "dist/${dir}/"
           done
+          if [[ -n "$CATALOG_FILE" ]]; then
+            jq empty "$CATALOG_FILE"
+            cp "$CATALOG_FILE" dist/catalog.json
+          fi
           tar -czf "dist/${ARCHIVE_NAME}-${VERSION}.tar.gz" -C dist "${dir}"
 
       - name: Set up Node
@@ -435,6 +446,7 @@ jobs:
           GITEA_URL: ${{ inputs.gitea_url }}
           GITEA_USER: ${{ inputs.gitea_user }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          CATALOG_FILE: ${{ inputs.catalog_file }}
           VERSION: ${{ needs.release-please.outputs.version }}
         run: |
           : "${GITEA_URL:?Set gitea_url when publish_gitea is enabled}"
@@ -443,9 +455,14 @@ jobs:
           archive="${ARCHIVE_NAME}-${VERSION}.tar.gz"
           installer="install-${ARCHIVE_NAME}-${VERSION}.sh"
           package_base="${GITEA_URL%/}/api/packages/${GITEA_USER}/generic/${GITEA_PACKAGE_NAME}/${VERSION}"
-          for upload in \
-            "dist/${archive}|${package_base}/${archive}" \
-            "dist/${installer}|${package_base}/${installer}"; do
+          uploads=(
+            "dist/${archive}|${package_base}/${archive}"
+            "dist/${installer}|${package_base}/${installer}"
+          )
+          if [[ -n "$CATALOG_FILE" ]]; then
+            uploads+=("dist/catalog.json|${package_base}/catalog.json")
+          fi
+          for upload in "${uploads[@]}"; do
             file="${upload%%|*}"
             url="${upload#*|}"
             curl --fail-with-body --retry 3 \

@@ -8,6 +8,7 @@ This repository intentionally contains only generic marketplace automation:
 - skill and plugin manifest validation
 - pull-request preview archives
 - release archives and installation summaries
+- optional catalog metadata published beside release artifacts
 - optional npm registry publishing for agents that support npm catalogs
 
 Container, infrastructure, deployment, and environment-specific workflows are
@@ -37,6 +38,10 @@ to download and unpack them, which is what the generated installer script does.
 Agents can, however, resolve npm packages on their own, so publishing the same
 release contents to an npm registry lets them install and update without an
 installer.
+
+Release callers may pass `catalog_file` to publish a validated `catalog.json`
+beside the Generic package archive and installer. The file is also included in
+the archive when its path is listed in `package_paths`.
 
 Enable it on the release workflow:
 
