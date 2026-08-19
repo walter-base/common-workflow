@@ -50,14 +50,12 @@ on:
         default: skills .claude-plugin .cursor-plugin .agents plugins README.md CHANGELOG.md
       archive_name:
         description: Prefix used for the release archive.
-        required: false
+        required: true
         type: string
-        default: agent-marketplace
       gitea_package_name:
         description: Public Gitea generic package name for the release artifact.
-        required: false
+        required: true
         type: string
-        default: agent-marketplace
       claude_plugin_name:
         description: Claude plugin name used in the installation summary.
         required: false
