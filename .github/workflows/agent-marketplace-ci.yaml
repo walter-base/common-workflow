@@ -9,23 +9,33 @@ on:
         type: string
         default: skills
       claude_marketplace_file:
-        description: Claude marketplace manifest relative to the repository root.
+        description: >-
+          Claude marketplace manifest relative to the repository root. Empty by
+          default: a plugin repository no longer carries one, because the
+          central marketplace is generated from the package registry.
         required: false
         type: string
-        default: .claude-plugin/marketplace.json
+        default: ""
       claude_plugin_file:
         description: Claude plugin manifest relative to the repository root.
         required: false
         type: string
         default: .claude-plugin/plugin.json
       codex_plugin_root:
-        description: Codex plugin root relative to the repository root.
+        description: >-
+          Codex plugin root relative to the repository root. Defaults to the
+          repository itself, matching the release workflow — these two described
+          the same layout differently, so CI passed while release failed.
         required: false
         type: string
+        default: "."
       cursor_plugin_root:
-        description: Cursor plugin root relative to the repository root.
+        description: >-
+          Cursor plugin root relative to the repository root. Empty disables
+          cursor validation.
         required: false
         type: string
+        default: ""
 
 permissions:
   contents: read
