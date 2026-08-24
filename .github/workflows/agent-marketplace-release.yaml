@@ -513,11 +513,12 @@ jobs:
           files: dist/*
 
       - name: Refresh the central marketplace
-        # The manifest is derived from the package registry, so it only needs
-        # regenerating when the set of plugins changes — a new version of an
-        # existing plugin leaves it byte-identical, because entries carry no
-        # version and npm resolves `latest`. This call exists so a *new* plugin
-        # appears immediately rather than at the next scheduled run.
+        # The manifest is derived from the package registry, so publishing is
+        # all this job has to do — the generator re-derives the catalogue from
+        # whatever the registry now holds. This call only makes that happen now
+        # rather than at the generator's next scheduled run, and it matters for
+        # a new version just as much as a new plugin: codex entries carry the
+        # resolved version, so a release changes the catalogue's bytes.
         if: inputs.marketplace_dispatch_url != ''
         env:
           DISPATCH_URL: ${{ inputs.marketplace_dispatch_url }}
