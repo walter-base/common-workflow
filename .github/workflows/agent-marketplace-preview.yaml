@@ -12,7 +12,7 @@ on:
         description: Claude marketplace manifest relative to the repository root.
         required: false
         type: string
-        default: .claude-plugin/marketplace.json
+        default: ""
       claude_plugin_file:
         description: Claude plugin manifest relative to the repository root.
         required: false
@@ -22,10 +22,12 @@ on:
         description: Codex plugin root relative to the repository root.
         required: false
         type: string
+        default: "."
       cursor_plugin_root:
         description: Cursor plugin root relative to the repository root.
         required: false
         type: string
+        default: ""
       package_paths:
         description: Space-separated paths to package into the preview archive.
         required: false
