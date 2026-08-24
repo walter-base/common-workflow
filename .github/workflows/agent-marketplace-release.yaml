@@ -14,25 +14,53 @@ on:
         type: string
         default: skills
       claude_marketplace_file:
-        description: Claude marketplace manifest relative to the repository root.
+        description: >-
+          Claude marketplace manifest relative to the repository root. Empty by
+          default: a plugin repository no longer carries one, because the
+          central marketplace is generated from the package registry.
         required: false
         type: string
-        default: .claude-plugin/marketplace.json
+        default: ""
       claude_plugin_file:
         description: Claude plugin manifest relative to the repository root.
         required: false
         type: string
         default: .claude-plugin/plugin.json
       codex_plugin_root:
-        description: Codex plugin root relative to the repository root.
+        description: >-
+          Codex plugin root relative to the repository root. Defaults to the
+          repository itself: codex's npm plugin source has no path field, so the
+          package root must be the plugin root.
         required: false
         type: string
-        default: plugins/marketplace
+        default: "."
       cursor_plugin_root:
-        description: Cursor plugin root relative to the repository root.
+        description: >-
+          Cursor plugin root relative to the repository root. Empty disables
+          cursor validation. It defaulted to a scaffold path, which meant every
+          caller that stopped shipping a cursor bundle had to remember to blank
+          it or CI would demand a directory that never existed.
         required: false
         type: string
-        default: plugins/marketplace
+        default: ""
+      marketplace_url:
+        description: >-
+          URL of the central marketplace manifest, printed in the release notes
+          as the way to install. Empty falls back to the per-release
+          instructions.
+        required: false
+        type: string
+        default: ""
+      marketplace_dispatch_url:
+        description: >-
+          Gitea workflow-dispatch endpoint for the manifest generator. Called
+          after publishing so the marketplace reflects a new plugin promptly
+          rather than at the next scheduled run. Gitea's own registry_package
+          event cannot be used: it only fires for packages linked to the
+          repository, and these are published from here.
+        required: false
+        type: string
+        default: ""
       release_config_file:
         description: Release Please configuration file.
         required: false
@@ -127,6 +155,11 @@ on:
     secrets:
       GITHUB_PAT:
         description: Optional GitHub token for release-please pull requests.
+        required: false
+      MARKETPLACE_DISPATCH_TOKEN:
+        description: >-
+          Gitea token permitted to dispatch the manifest generator workflow.
+          Only needed when marketplace_dispatch_url is set.
         required: false
       GITEA_TOKEN:
         description: Gitea token with permission to publish generic packages.
@@ -479,6 +512,38 @@ jobs:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: dist/*
 
+      - name: Refresh the central marketplace
+        # The manifest is derived from the package registry, so it only needs
+        # regenerating when the set of plugins changes — a new version of an
+        # existing plugin leaves it byte-identical, because entries carry no
+        # version and npm resolves `latest`. This call exists so a *new* plugin
+        # appears immediately rather than at the next scheduled run.
+        if: inputs.marketplace_dispatch_url != ''
+        env:
+          DISPATCH_URL: ${{ inputs.marketplace_dispatch_url }}
+          DISPATCH_TOKEN: ${{ secrets.MARKETPLACE_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${DISPATCH_TOKEN:-}" ]]; then
+            echo "marketplace_dispatch_url is set but MARKETPLACE_DISPATCH_TOKEN is not; skipping." >&2
+            exit 0
+          fi
+          # Never fail the release over this: the package is already published,
+          # and the generator's schedule will pick it up regardless. Failing here
+          # would turn a delayed catalogue into a red release.
+          status="$(curl --silent --show-error --output /dev/stderr --write-out '%{http_code}' \
+            --max-time 30 -X POST \
+            -H "Authorization: token ${DISPATCH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref":"main"}' \
+            "$DISPATCH_URL" || true)"
+          if [[ "$status" == "204" || "$status" == "201" || "$status" == "200" ]]; then
+            echo "Requested marketplace regeneration (HTTP $status)."
+          else
+            echo "Could not reach the manifest generator (HTTP $status); the scheduled run will catch up." >&2
+          fi
+
       - name: Write GitHub installation summary
         env:
           VERSION: ${{ needs.release-please.outputs.version }}
@@ -495,6 +560,7 @@ jobs:
           GITEA_INSTALLER_URL: ${{ steps.gitea.outputs.installer_url }}
           NPM_PACKAGE: ${{ steps.npm.outputs.npm_package }}
           NPM_REGISTRY_URL: ${{ steps.npm.outputs.npm_registry }}
+          MARKETPLACE_URL: ${{ inputs.marketplace_url }}
         run: |
           {
             printf '# Agent plugin %s\n\n' "$VERSION"
@@ -511,7 +577,21 @@ jobs:
               printf '%s\n\n' '```'
             fi
 
-            if [[ -n "$GITEA_INSTALLER_URL" ]]; then
+            if [[ -n "$MARKETPLACE_URL" ]]; then
+              # One marketplace lists every plugin, so these instructions do
+              # not change per release and never name this version: the
+              # manifest points at the package and npm resolves the newest.
+              printf '## Claude Code\n\n'
+              printf '%s\n' '```bash'
+              printf 'claude plugin marketplace add %s\n' "$MARKETPLACE_URL"
+              printf 'claude plugin install %s@%s\n' "$CLAUDE_PLUGIN_NAME" "$CLAUDE_MARKETPLACE_NAME"
+              printf '%s\n\n' '```'
+
+              printf 'Later releases arrive with:\n\n'
+              printf '%s\n' '```bash'
+              printf 'claude plugin marketplace update %s\n' "$CLAUDE_MARKETPLACE_NAME"
+              printf '%s\n\n' '```'
+            elif [[ -n "$GITEA_INSTALLER_URL" ]]; then
               printf '## Claude Code\n\n'
               printf '%s\n' '```bash'
               printf 'curl --fail --location --retry 3 "%s" | bash -s -- claude\n' "$GITEA_INSTALLER_URL"
