@@ -115,7 +115,7 @@ on:
         type: string
         default: marketplace
       publish_gitea:
-        description: Upload public installers for Claude, Codex, OpenCode, and Cursor to Gitea.
+        description: Deprecated and ignored. Generic Gitea installer publishing is disabled; use the npm registry.
         required: false
         type: boolean
         default: false
@@ -330,7 +330,9 @@ jobs:
           echo "npm_registry=${registry}" >> "$GITHUB_OUTPUT"
 
       - name: Build Gitea installers
-        if: inputs.publish_gitea
+        # Generic installer publishing is retired. Keep this block temporarily
+        # for backwards-compatible workflow inputs, but never execute it.
+        if: false
         env:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
           GITEA_PACKAGE_NAME: ${{ inputs.gitea_package_name }}
@@ -477,7 +479,9 @@ jobs:
           fi
 
       - name: Upload archive to Gitea
-        if: inputs.publish_gitea
+        # Generic installer publishing is retired. Keep this block temporarily
+        # for backwards-compatible workflow inputs, but never execute it.
+        if: false
         id: gitea
         env:
           ARCHIVE_NAME: ${{ inputs.archive_name }}
@@ -512,7 +516,6 @@ jobs:
           echo "installer_url=${package_base}/${installer}" >> "$GITHUB_OUTPUT"
 
       - name: Upload archive to GitHub Release
-        if: ${{ !inputs.publish_gitea }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
