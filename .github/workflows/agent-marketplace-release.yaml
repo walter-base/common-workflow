@@ -253,6 +253,7 @@ jobs:
           NPM_REGISTRY: ${{ inputs.npm_registry }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITEA_TOKEN }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
+          CATALOG_FILE: ${{ inputs.catalog_file }}
           VERSION: ${{ needs.release-please.outputs.version }}
         shell: bash
         run: |
@@ -278,11 +279,16 @@ jobs:
           # package and the generic archive can never drift apart.
           pkg_dir="dist/${ARCHIVE_NAME}-${VERSION}"
           files_json="$(printf '%s\n' ${PACKAGE_PATHS} | jq -R . | jq -s .)"
+          description=""
+          if [[ -n "$CATALOG_FILE" ]]; then
+            description="$(jq -r '.description // empty' "$CATALOG_FILE")"
+          fi
           jq -n \
             --arg name "$NPM_PACKAGE_NAME" \
             --arg version "$VERSION" \
+            --arg description "$description" \
             --argjson files "$files_json" \
-            '{name: $name, version: $version, files: $files, private: false}' \
+            '{name: $name, version: $version, files: $files, private: false} + (if $description == "" then {} else {description: $description} end)' \
             > "${pkg_dir}/package.json"
 
           # `npm pack <path>` without a leading `./` is parsed as a GitHub owner/repo
